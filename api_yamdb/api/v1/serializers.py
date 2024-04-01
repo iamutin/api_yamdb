@@ -29,18 +29,16 @@ class UserCreateSerializer(serializers.Serializer):
     def validate(self, data):
         username = data.get('username')
         email = data.get('email')
+        errors = {}
         user_by_username = User.objects.filter(username=username)
         user_by_email = User.objects.filter(email=email)
         if set(user_by_username) == set(user_by_email):
             return data
         if user_by_email:
-            raise serializers.ValidationError(
-                'Пользователь с таким email уже существует!'
-            )
+            errors['email'] = 'Пользователь с таким email уже существует!'
         if user_by_username:
-            raise serializers.ValidationError(
-                'Пользователь с таким username уже существует!'
-            )
+            errors['username'] = 'Пользователь с таким username уже существует!'
+        raise serializers.ValidationError(errors)
 
     def validate_username(self, value):
         if value.lower() == 'me':
@@ -68,6 +66,10 @@ class UserSerializer(serializers.ModelSerializer):
                 'Использовать me в качестве username запрещено!'
             )
         return value
+
+    def validate(self, data):
+        check_for_required_fields(data, 'username', 'email')
+        return data
 
 
 class UserMeSerializer(UserSerializer):
@@ -115,6 +117,10 @@ class TitleCreateSerializer(serializers.ModelSerializer):
             )
         return year
 
+    def validate(self, data):
+        check_for_required_fields(data, 'name', 'year', 'genre', 'category')
+        return data
+
 
 class TitleSerializer(serializers.ModelSerializer):
     genre = GenreSerializer(many=True, read_only=True)
@@ -146,6 +152,8 @@ class ReviewSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     'Вы уже оставили отзыв к этому произведению'
                 )
+        if request.method == 'PATCH':
+            check_for_required_fields(data, 'text', 'score')
         return data
 
 
@@ -157,3 +165,11 @@ class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = ('id', 'text', 'author', 'pub_date')
+
+
+def check_for_required_fields(data: dict, *fields: str) -> None:
+    errors = {}
+    for field in fields:
+        if field not in data:
+            errors[field] = f'Поле {field} обязательное.'
+            raise serializers.ValidationError(errors)
