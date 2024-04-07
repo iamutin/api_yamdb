@@ -6,16 +6,16 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.generics import CreateAPIView
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
 
 from .filters import TitleFilter
 from .mixins import ListCreateDestroyViewSet
-from .permissions import (AdminOnly,
-                          AdminOrReadOnly,
-                          AuthorModeratorAdminOrReadonly)
+from .permissions import (IsAdmin,
+                          IsAdminOrReadOnly,
+                          IsAuthorModeratorAdminOrReadOnly)
 from .serializers import (CategorySerializer,
                           CommentSerializer,
                           GenreSerializer,
@@ -31,21 +31,21 @@ from reviews.models import Category, Genre, Review, Title
 User = get_user_model()
 
 
-class CreateUserView(APIView):
+class CreateUserView(CreateAPIView):
+    serializer_class = UserCreateSerializer
     permission_classes = (permissions.AllowAny,)
 
-    def post(self, request):
-        serializer = UserCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        return Response(response.data, status=status.HTTP_200_OK)
 
 
-class TokenObtainView(APIView):
+class TokenObtainView(CreateAPIView):
+    serializer_class = TokenObtainSerializer
     permission_classes = (permissions.AllowAny,)
 
-    def post(self, request):
-        serializer = TokenObtainSerializer(data=request.data)
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         username = serializer.validated_data.get('username')
         confirmation_code = serializer.validated_data.get('confirmation_code')
@@ -61,7 +61,7 @@ class UsersViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     http_method_names = ('get', 'post', 'patch', 'delete')
     serializer_class = UserSerializer
-    permission_classes = (AdminOnly,)
+    permission_classes = (IsAdmin,)
     lookup_field = 'username'
     filter_backends = (filters.SearchFilter,)
     search_fields = ('username',)
@@ -70,10 +70,9 @@ class UsersViewSet(viewsets.ModelViewSet):
         detail=False,
         methods=('get', 'patch'),
         permission_classes=(permissions.IsAuthenticated,),
-        serializer_class=UserMeSerializer,
-        url_path='me'
+        serializer_class=UserMeSerializer
     )
-    def profile(self, request):
+    def me(self, request):
         if request.method == 'PATCH':
             serializer = self.get_serializer(
                 request.user, data=request.data, partial=True
@@ -96,7 +95,7 @@ class GenreViewSet(ListCreateDestroyViewSet):
 class TitleViewSet(viewsets.ModelViewSet):
     queryset = Title.objects.annotate(rating=Avg('reviews__score'))
     http_method_names = ('get', 'post', 'patch', 'delete')
-    permission_classes = (AdminOrReadOnly,)
+    permission_classes = (IsAdminOrReadOnly,)
     filter_backends = (DjangoFilterBackend,)
     filterset_class = TitleFilter
 
@@ -110,7 +109,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
     http_method_names = ('get', 'post', 'patch', 'delete')
     permission_classes = (
-        IsAuthenticatedOrReadOnly, AuthorModeratorAdminOrReadonly
+        IsAuthenticatedOrReadOnly, IsAuthorModeratorAdminOrReadOnly
     )
 
     def get_queryset(self):
@@ -127,7 +126,7 @@ class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer
     http_method_names = ('get', 'post', 'patch', 'delete')
     permission_classes = (
-        IsAuthenticatedOrReadOnly, AuthorModeratorAdminOrReadonly
+        IsAuthenticatedOrReadOnly, IsAuthorModeratorAdminOrReadOnly
     )
 
     def get_queryset(self):

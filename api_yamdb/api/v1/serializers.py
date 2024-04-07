@@ -1,19 +1,20 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.validators import UnicodeUsernameValidator
+from django.db import IntegrityError
 from django.utils import timezone
 
 from rest_framework import serializers
 
+from api.constants import EMAIL_MAX_LENGTH, USERNAME_MAX_LENGTH
+from api.v1.mixins import UsernameValidateMixin
 from reviews.models import Category, Comment, Genre, Review, Title
 
-USERNAME_MAX_LENGTH = 150
-EMAIL_MAX_LENGTH = 254
 User = get_user_model()
 username_validator = UnicodeUsernameValidator()
 
 
-class UserCreateSerializer(serializers.Serializer):
+class UserCreateSerializer(UsernameValidateMixin, serializers.Serializer):
     email = serializers.EmailField(max_length=EMAIL_MAX_LENGTH)
     username = serializers.CharField(
         max_length=USERNAME_MAX_LENGTH,
@@ -21,51 +22,45 @@ class UserCreateSerializer(serializers.Serializer):
     )
 
     def create(self, validated_data):
-        user, _ = User.objects.get_or_create(**validated_data)
-        confirmation_code = default_token_generator.make_token(user)
-        user.email_user(subject='Confirmation code', message=confirmation_code)
-        return user
-
-    def validate(self, data):
-        username = data.get('username')
-        email = data.get('email')
-        errors = {}
-        user_by_username = User.objects.filter(username=username)
-        user_by_email = User.objects.filter(email=email)
-        if set(user_by_username) == set(user_by_email):
-            return data
-        if user_by_email:
-            errors['email'] = 'Пользователь с таким email уже существует!'
-        if user_by_username:
-            errors['username'] = 'Пользователь с таким username уже существует!'
-        raise serializers.ValidationError(errors)
-
-    def validate_username(self, value):
-        if value.lower() == 'me':
-            raise serializers.ValidationError(
-                'Использовать me в качестве username запрещено!'
+        username = validated_data.get('username')
+        email = validated_data.get('email')
+        try:
+            user, _ = User.objects.get_or_create(
+                username=username, email=email
             )
-        return value
+            confirmation_code = default_token_generator.make_token(user)
+            user.email_user(
+                subject='Confirmation code', message=confirmation_code
+            )
+            return user
+        except IntegrityError:
+            errors = {}
+            if User.objects.filter(username=username).exists():
+                errors['username'] = [
+                    'Пользователь с таким username уже существует!'
+                ]
+            if User.objects.filter(email=email).exists():
+                errors['email'] = [
+                    'Пользователь с таким email уже существует!'
+                ]
+            raise serializers.ValidationError(errors)
 
 
 class TokenObtainSerializer(serializers.Serializer):
-    username = serializers.CharField()
-    confirmation_code = serializers.CharField()
+    username = serializers.CharField(
+        max_length=USERNAME_MAX_LENGTH, required=True
+    )
+    confirmation_code = serializers.CharField(
+        allow_blank=False, required=True
+    )
 
 
-class UserSerializer(serializers.ModelSerializer):
+class UserSerializer(UsernameValidateMixin, serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
             'username', 'email', 'first_name', 'last_name', 'bio', 'role'
         )
-
-    def validate_username(self, value):
-        if value.lower() == 'me':
-            raise serializers.ValidationError(
-                'Использовать me в качестве username запрещено!'
-            )
-        return value
 
     def validate(self, data):
         check_for_required_fields(data, 'username', 'email')

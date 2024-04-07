@@ -11,7 +11,7 @@ slug_validator = RegexValidator(regex=r'^[-a-zA-Z0-9_]+$')
 class GenreCategory(models.Model):
     name = models.CharField('Категория', max_length=256)
     slug = models.SlugField(
-        'Slug категории', unique=True, validators=(slug_validator,)
+        'Slug', unique=True, validators=(slug_validator,)
     )
 
     class Meta:
