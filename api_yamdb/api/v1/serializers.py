@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from rest_framework import serializers
 
-from api.constants import EMAIL_MAX_LENGTH, USERNAME_MAX_LENGTH
+from users.constants import EMAIL_MAX_LENGTH, USERNAME_MAX_LENGTH
 from api.v1.mixins import UsernameValidateMixin
 from reviews.models import Category, Comment, Genre, Review, Title
 
